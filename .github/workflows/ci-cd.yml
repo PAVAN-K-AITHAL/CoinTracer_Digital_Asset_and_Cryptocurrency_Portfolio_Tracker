@@ -8,6 +8,12 @@ on:
     branches: 
       - '**'  # Run on all pull requests
 
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  actions: read
+
 jobs:
   lint-all-services:
     name: Lint All Services
