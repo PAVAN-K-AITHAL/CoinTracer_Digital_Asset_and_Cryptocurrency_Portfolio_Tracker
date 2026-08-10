@@ -1,6 +1,9 @@
 import axios from 'axios';
 
-const API_URL = 'http://localhost:5000/api/v1';
+// Environment-aware API URL
+// In development: empty string works with Vite proxy
+// In production: VITE_API_URL points to the OCI backend
+const API_URL = `${import.meta.env.VITE_API_URL || ''}/api/v1`;
 
 const getAuthHeaders = () => {
   const token = localStorage.getItem('token');

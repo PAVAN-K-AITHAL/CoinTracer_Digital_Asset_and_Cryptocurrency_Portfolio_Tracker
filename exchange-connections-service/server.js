@@ -9,7 +9,8 @@ const {
   notFoundHandler,
   createLogger,
   healthCheck,
-  checkDatabase
+  checkDatabase,
+  eventBus
 } = require('../shared');
 
 // Import routes
@@ -75,6 +76,21 @@ const server = app.listen(PORT, () => {
   logger.info('API endpoints available', {
     api: `http://localhost:${PORT}/api/v1`,
     health: `http://localhost:${PORT}/health`
+  });
+
+  // Subscribe to inter-service events
+  eventBus.subscribe('user.deleted', async (data) => {
+    const { userId } = data;
+    logger.info('Received user.deleted event', { userId });
+    try {
+      // Delete all portfolios for this user (CASCADE deletes holdings, transactions, etc.)
+      const result = await pool.query('DELETE FROM portfolios WHERE user_id = $1', [userId]);
+      // Also delete exchange connections
+      await pool.query('DELETE FROM exchange_connections WHERE user_id = $1', [userId]);
+      logger.info('Cleaned up user data', { userId, portfoliosDeleted: result.rowCount });
+    } catch (err) {
+      logger.error('Failed to clean up user data', { userId, error: err.message });
+    }
   });
 });
 

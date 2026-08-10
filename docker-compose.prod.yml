@@ -1,0 +1,173 @@
+# ============================================================================
+# CoinTracer — Docker Compose Production (OCI Deployment)
+# ============================================================================
+# This file uses pre-built images from GitHub Container Registry (GHCR).
+# It is deployed to the OCI VM by the CI/CD pipeline.
+#
+# Usage (on OCI server):
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# Required .env variables on the server:
+#   DATABASE_URL, JWT_SECRET, ENCRYPTION_KEY, API_KEY_HASH_SECRET,
+#   CMC_API_KEY, FRONTEND_URL, GHCR_IMAGE_PREFIX
+# ============================================================================
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: cointracer-redis
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    restart: unless-stopped
+
+  gateway:
+    image: ${GHCR_IMAGE_PREFIX}/gateway:latest
+    container_name: cointracer-gateway
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - JWT_SECRET=${JWT_SECRET}
+      - REDIS_URL=redis://redis:6379
+      - USER_SERVICE_URL=http://user-svc:3001
+      - PORTFOLIO_SERVICE_URL=http://portfolio-svc:5000
+      - MARKET_SERVICE_URL=http://market-svc:5001
+      - PERSONALIZATION_SERVICE_URL=http://personalization-svc:3004
+      - ALERTS_SERVICE_URL=http://alerts-svc:5002
+      - FRONTEND_URL=${FRONTEND_URL}
+    depends_on:
+      redis:
+        condition: service_healthy
+      user-svc:
+        condition: service_healthy
+      portfolio-svc:
+        condition: service_healthy
+      market-svc:
+        condition: service_healthy
+    restart: unless-stopped
+
+  user-svc:
+    image: ${GHCR_IMAGE_PREFIX}/user-svc:latest
+    container_name: cointracer-user-svc
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - DATABASE_URL=${DATABASE_URL}
+      - DB_SCHEMA=users_svc
+      - JWT_SECRET=${JWT_SECRET}
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/health"]
+      interval: 15s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    restart: unless-stopped
+
+  portfolio-svc:
+    image: ${GHCR_IMAGE_PREFIX}/portfolio-svc:latest
+    container_name: cointracer-portfolio-svc
+    environment:
+      - NODE_ENV=production
+      - PORT=5000
+      - DATABASE_URL=${DATABASE_URL}
+      - DB_SCHEMA=portfolios_svc
+      - JWT_SECRET=${JWT_SECRET}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - API_KEY_HASH_SECRET=${API_KEY_HASH_SECRET}
+      - REDIS_URL=redis://redis:6379
+      - MARKET_DATA_SERVICE_URL=http://market-svc:5001/api/v1
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5000/health"]
+      interval: 15s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    restart: unless-stopped
+
+  market-svc:
+    image: ${GHCR_IMAGE_PREFIX}/market-svc:latest
+    container_name: cointracer-market-svc
+    environment:
+      - NODE_ENV=production
+      - PORT=5001
+      - DATABASE_URL=${DATABASE_URL}
+      - CMC_API_KEY=${CMC_API_KEY}
+      - CMC_BASE_URL=${CMC_BASE_URL:-https://pro-api.coinmarketcap.com}
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5001/health"]
+      interval: 15s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    restart: unless-stopped
+
+  personalization-svc:
+    image: ${GHCR_IMAGE_PREFIX}/personalization-svc:latest
+    container_name: cointracer-personalization-svc
+    environment:
+      - NODE_ENV=production
+      - PORT=3004
+      - DATABASE_URL=${DATABASE_URL}
+      - DB_SCHEMA=personalization_svc
+      - JWT_SECRET=${JWT_SECRET}
+      - REDIS_URL=redis://redis:6379
+      - MARKET_DATA_SERVICE_URL=http://market-svc:5001/api/v1
+    depends_on:
+      redis:
+        condition: service_healthy
+      market-svc:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3004/health"]
+      interval: 15s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    restart: unless-stopped
+
+  alerts-svc:
+    image: ${GHCR_IMAGE_PREFIX}/alerts-svc:latest
+    container_name: cointracer-alerts-svc
+    environment:
+      - NODE_ENV=production
+      - PORT=5002
+      - DATABASE_URL=${DATABASE_URL}
+      - DB_SCHEMA=alerts_svc
+      - JWT_SECRET=${JWT_SECRET}
+      - REDIS_URL=redis://redis:6379
+      - MARKET_DATA_SERVICE_URL=http://market-svc:5001/api/v1
+      - ENABLE_ALERT_WORKER=true
+      - ALERT_CHECK_INTERVAL_MS=60000
+    depends_on:
+      redis:
+        condition: service_healthy
+      market-svc:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5002/health"]
+      interval: 15s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    restart: unless-stopped
+
+volumes:
+  redis-data:

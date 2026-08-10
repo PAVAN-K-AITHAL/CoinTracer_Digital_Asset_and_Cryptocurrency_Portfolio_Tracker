@@ -1,0 +1,190 @@
+# ============================================================================
+# CoinTracer — Deploy Microservices to OCI via GitHub Actions
+# ============================================================================
+# Triggers on push to main branch.
+# Builds Docker images for all services, pushes to GitHub Container Registry,
+# then SSHs into OCI VM to pull and restart via Docker Compose.
+#
+# Required GitHub Secrets:
+#   OCI_HOST              — Public IP of your OCI VM
+#   OCI_USER              — SSH username (e.g., ubuntu)
+#   OCI_SSH_KEY           — Private SSH key for the OCI VM
+#   DATABASE_URL          — Neon PostgreSQL connection string
+#   JWT_SECRET            — Production JWT secret
+#   ENCRYPTION_KEY        — Production encryption key
+#   API_KEY_HASH_SECRET   — Production HMAC secret
+#   CMC_API_KEY           — CoinMarketCap API key
+#   FRONTEND_URL          — Vercel frontend URL (e.g., https://cointracer.vercel.app)
+# ============================================================================
+
+name: Deploy to OCI
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'frontend/**'
+      - '*.md'
+      - '.github/CODEOWNERS'
+
+  workflow_dispatch: # Allow manual trigger
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository }}
+
+jobs:
+  # ===========================================================================
+  # Job 1: Build & Push All Docker Images
+  # ===========================================================================
+  build:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Gateway
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/gateway:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/gateway:${{ github.sha }}
+
+      - name: Build and push User Service
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./user-service/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/user-svc:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/user-svc:${{ github.sha }}
+
+      - name: Build and push Portfolio Service
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./exchange-connections-service/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/portfolio-svc:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/portfolio-svc:${{ github.sha }}
+
+      - name: Build and push Market Data Service
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./market-data-service/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/market-svc:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/market-svc:${{ github.sha }}
+
+      - name: Build and push Personalization Service
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./personalization-service/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/personalization-svc:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/personalization-svc:${{ github.sha }}
+
+      - name: Build and push Alerts Service
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./alerts-service/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/alerts-svc:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/alerts-svc:${{ github.sha }}
+
+  # ===========================================================================
+  # Job 2: Deploy to OCI via Docker Compose
+  # ===========================================================================
+  deploy:
+    name: Deploy to OCI
+    runs-on: ubuntu-latest
+    needs: build
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Copy production compose file to OCI
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.OCI_HOST }}
+          username: ${{ secrets.OCI_USER }}
+          key: ${{ secrets.OCI_SSH_KEY }}
+          source: "docker-compose.prod.yml"
+          target: "/opt/cointracer"
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          host: ${{ secrets.OCI_HOST }}
+          username: ${{ secrets.OCI_USER }}
+          key: ${{ secrets.OCI_SSH_KEY }}
+          envs: GITHUB_TOKEN
+          script: |
+            cd /opt/cointracer
+
+            # Login to GitHub Container Registry
+            echo "$GITHUB_TOKEN" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            # Create .env for Docker Compose with all required secrets
+            cat > .env << 'ENVEOF'
+            GHCR_IMAGE_PREFIX=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}
+            DATABASE_URL=${{ secrets.DATABASE_URL }}
+            JWT_SECRET=${{ secrets.JWT_SECRET }}
+            ENCRYPTION_KEY=${{ secrets.ENCRYPTION_KEY }}
+            API_KEY_HASH_SECRET=${{ secrets.API_KEY_HASH_SECRET }}
+            CMC_API_KEY=${{ secrets.CMC_API_KEY }}
+            CMC_BASE_URL=https://pro-api.coinmarketcap.com
+            FRONTEND_URL=${{ secrets.FRONTEND_URL }}
+            ENVEOF
+
+            # Pull latest images
+            docker compose -f docker-compose.prod.yml pull
+
+            # Restart all services (zero-downtime rolling update)
+            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+
+            # Wait for gateway health check
+            echo "Waiting for health check..."
+            for i in $(seq 1 30); do
+              if curl -sf http://localhost:3000/health > /dev/null 2>&1; then
+                echo "✅ Gateway health check passed!"
+                docker compose -f docker-compose.prod.yml ps
+                break
+              fi
+              echo "Waiting... ($i/30)"
+              sleep 2
+            done
+
+            # Clean up old images
+            docker image prune -f
+
+            echo "🚀 Microservices deployment complete!"

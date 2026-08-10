@@ -12,23 +12,55 @@
 const { Pool } = require('pg');
 require('dotenv').config();
 
-// Support both DB_* and PG* environment variable prefixes
-const config = {
-  host: process.env.DB_HOST || process.env.PGHOST || 'localhost',
-  port: Number(process.env.DB_PORT || process.env.PGPORT || 5432),
-  database: process.env.DB_NAME || process.env.PGDATABASE || 'portfolio_db',
-  user: process.env.DB_USER || process.env.PGUSER || 'postgres',
-  password: process.env.DB_PASSWORD || process.env.PGPASSWORD || 'postgres',
-  max: 20,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
-};
+// Build pool configuration.
+// Priority: DATABASE_URL (cloud/production) over individual DB_* / PG* vars (local dev)
+const isProduction = process.env.NODE_ENV === 'production';
 
-const pool = new Pool(config);
+let poolConfig;
+
+if (process.env.DATABASE_URL) {
+  // Cloud-hosted Postgres (Neon, Supabase, Railway, etc.)
+  poolConfig = {
+    connectionString: process.env.DATABASE_URL,
+    ssl: {
+      rejectUnauthorized: false, // Required by most cloud Postgres providers
+    },
+    max: parseInt(process.env.DB_POOL_MAX, 10) || 5, // Conservative for free tiers
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 5000,
+  };
+} else {
+  // Local development — support both DB_* and PG* environment variable prefixes
+  poolConfig = {
+    host: process.env.DB_HOST || process.env.PGHOST || 'localhost',
+    port: Number(process.env.DB_PORT || process.env.PGPORT || 5432),
+    database: process.env.DB_NAME || process.env.PGDATABASE || 'portfolio_db',
+    user: process.env.DB_USER || process.env.PGUSER || 'postgres',
+    password: process.env.DB_PASSWORD || process.env.PGPASSWORD || 'postgres',
+    max: parseInt(process.env.DB_POOL_MAX, 10) || 20,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 2000,
+  };
+
+  // Enable SSL locally only if explicitly requested
+  if (process.env.DB_SSL === 'true') {
+    poolConfig.ssl = { rejectUnauthorized: false };
+  }
+}
+
+const pool = new Pool(poolConfig);
+
+// Schema isolation: set search_path per service if DB_SCHEMA is configured
+const dbSchema = process.env.DB_SCHEMA;
 
 // Connection event handlers
-pool.on('connect', () => {
-  console.log('Database connected successfully');
+pool.on('connect', async (client) => {
+  if (dbSchema) {
+    await client.query(`SET search_path TO ${dbSchema}, public`);
+    console.log(`Database connected (schema: ${dbSchema})`);
+  } else {
+    console.log('Database connected successfully');
+  }
 });
 
 pool.on('error', (err) => {

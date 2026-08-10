@@ -64,3 +64,15 @@ out/
 *.pem
 *.key
 *.crt
+
+# Environment files (never commit secrets!)
+.env
+.env.local
+.env.production
+.env.production.local
+!.env.example
+!**/.env.example
+
+# Deployment-specific
+logs/
+**/logs/

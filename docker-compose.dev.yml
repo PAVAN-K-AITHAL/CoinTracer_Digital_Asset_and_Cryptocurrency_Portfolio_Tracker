@@ -1,0 +1,64 @@
+# ============================================================================
+# CoinTracer — Docker Compose Development Overrides
+# ============================================================================
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+#
+# This file overrides production settings for local development:
+#   - Mounts source code as volumes (hot-reload)
+#   - Exposes individual service ports for debugging
+#   - Sets NODE_ENV=development
+# ============================================================================
+
+services:
+  gateway:
+    environment:
+      - NODE_ENV=development
+    volumes:
+      - ./server.js:/app/server.js
+      - ./shared:/app/shared
+
+  user-svc:
+    environment:
+      - NODE_ENV=development
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./user-service:/app/user-service
+      - ./shared:/app/shared
+
+  portfolio-svc:
+    environment:
+      - NODE_ENV=development
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./exchange-connections-service:/app/exchange-connections-service
+      - ./shared:/app/shared
+
+  market-svc:
+    environment:
+      - NODE_ENV=development
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./market-data-service:/app/market-data-service
+      - ./shared:/app/shared
+
+  personalization-svc:
+    environment:
+      - NODE_ENV=development
+    ports:
+      - "3004:3004"
+    volumes:
+      - ./personalization-service:/app/personalization-service
+      - ./shared:/app/shared
+
+  alerts-svc:
+    environment:
+      - NODE_ENV=development
+    ports:
+      - "5002:5002"
+    volumes:
+      - ./alerts-service:/app/alerts-service
+      - ./shared:/app/shared

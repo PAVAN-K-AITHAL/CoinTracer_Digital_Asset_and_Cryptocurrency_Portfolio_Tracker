@@ -34,6 +34,12 @@ const authMiddleware = (req, res, next) => {
 
     // Verify token with JWT secret
     const jwtSecret = process.env.JWT_SECRET || 'dev-change-me';
+
+    // Fail fast in production if JWT_SECRET is not properly configured
+    if (process.env.NODE_ENV === 'production' && (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'dev-change-me')) {
+      console.error('FATAL: JWT_SECRET is not set or is using the default value in production!');
+      return res.status(500).json({ error: 'Server configuration error.' });
+    }
     
     try {
       const decoded = jwt.verify(token, jwtSecret);

@@ -2,6 +2,7 @@ const db = require('../db');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const { eventBus } = require('../../shared');
 
 exports.register = async (req, res) => {
   const { email, password } = req.body;
@@ -24,6 +25,10 @@ exports.register = async (req, res) => {
     const newUser = newUserResult.rows[0];
 
     const token = jwt.sign({ userId: newUser.id }, process.env.JWT_SECRET, { expiresIn: '1h' });
+
+    // Publish user.created event for other services
+    eventBus.publish('user.created', { userId: newUser.id, email: newUser.email }).catch(() => {});
+
     res.status(201).json({ user: newUser, token });
   } catch (error) {
     console.error(error);
@@ -255,8 +260,12 @@ exports.deleteAccount = async (req, res) => {
       return res.status(401).json({ message: 'Invalid password.' });
     }
 
-    // Delete user (CASCADE will handle related data)
-    await db.query('DELETE FROM public.users WHERE id = $1', [userId]);
+    // Delete user from users table
+    await db.query('DELETE FROM users WHERE id = $1', [userId]);
+
+    // Publish user.deleted event so other services clean up their data
+    // (replaces old CASCADE foreign key behavior)
+    eventBus.publish('user.deleted', { userId }).catch(() => {});
 
     res.status(200).json({ message: 'Account deleted successfully.' });
   } catch (error) {

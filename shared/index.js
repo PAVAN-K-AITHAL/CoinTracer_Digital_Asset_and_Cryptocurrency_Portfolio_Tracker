@@ -34,4 +34,10 @@ module.exports = {
   // Health Check
   healthCheck: require('./healthCheck').healthCheck,
   checkDatabase: require('./healthCheck').checkDatabase,
+
+  // Event Bus (Redis pub/sub)
+  eventBus: require('./eventBus').eventBus,
+
+  // Inter-Service HTTP Client
+  ServiceClient: require('./serviceClient').ServiceClient,
 };

@@ -22,12 +22,17 @@
     "lint": "node scripts/lint-all-services.js",
     "lint:fix": "node scripts/lint-all-services.js --fix",
     "lint:score": "node scripts/lint-all-services.js --score",
-    "dev": "dotenv -e .env -- concurrently -n front,user,personal,market,exchange,alerts -c blue,magenta,cyan,yellow,green,red \"npm:dev:frontend\" \"npm:dev:user-service\" \"npm:dev:personalization-service\" \"npm:dev:market-data-service\" \"npm:dev:exchange-connections-service\" \"npm:dev:alerts-service\"",    "dev:frontend": "npm run dev -w frontend",
+    "dev": "dotenv -e .env -- concurrently -n front,user,personal,market,exchange,alerts -c blue,magenta,cyan,yellow,green,red \"npm:dev:frontend\" \"npm:dev:user-service\" \"npm:dev:personalization-service\" \"npm:dev:market-data-service\" \"npm:dev:exchange-connections-service\" \"npm:dev:alerts-service\"",
+    "dev:frontend": "npm run dev -w frontend",
     "dev:user-service": "npm run start -w user-service",
     "dev:personalization-service": "npm run start -w personalization-service",
     "dev:market-data-service": "npm run dev -w market-data-service",
     "dev:exchange-connections-service": "npm run dev -w exchange-connections-service",
-    "dev:alerts-service": "npm run dev -w alerts-service"
+    "dev:alerts-service": "npm run dev -w alerts-service",
+    "start:prod": "NODE_ENV=production node server.js",
+    "start:docker": "docker compose up -d",
+    "stop:docker": "docker compose down",
+    "logs:docker": "docker compose logs -f"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",
@@ -37,5 +42,9 @@
     "eslint-plugin-import": "^2.29.1",
     "eslint-plugin-n": "^16.6.2",
     "eslint-plugin-promise": "^6.1.1"
+  },
+  "dependencies": {
+    "http-proxy-middleware": "^4.2.0",
+    "ioredis": "^6.0.0"
   }
 }

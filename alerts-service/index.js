@@ -6,8 +6,10 @@ const {
   errorHandler,
   notFoundHandler,
   createLogger,
-  healthCheck
+  healthCheck,
+  eventBus
 } = require('../shared');
+const { query } = require('../shared/database');
 
 const alertRoutes = require('./routes/alert.routes');
 const AlertWorker = require('./services/alertWorker.service');
@@ -49,6 +51,18 @@ app.use(errorHandler);
 const PORT = process.env.PORT || 5002;
 const server = app.listen(PORT, () => {
   logger.info('Alerts Service started', { port: PORT, url: `http://localhost:${PORT}` });
+
+  // Subscribe to inter-service events
+  eventBus.subscribe('user.deleted', async (data) => {
+    const { userId } = data;
+    logger.info('Received user.deleted event', { userId });
+    try {
+      const result = await query('DELETE FROM alerts WHERE user_id = $1', [userId]);
+      logger.info('Cleaned up user alerts', { userId, deleted: result.rowCount });
+    } catch (err) {
+      logger.error('Failed to clean up alerts', { userId, error: err.message });
+    }
+  });
 });
 
 // ======================

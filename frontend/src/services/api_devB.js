@@ -1,13 +1,13 @@
-// --- Base URLs for your backend services ---
-// These must match the ports you set up in your backend!
+// --- Environment-Aware API Configuration ---
+// In development: Vite proxy handles routing (no base URL needed)
+// In production: VITE_API_URL points to the OCI backend
+const API_BASE = import.meta.env.VITE_API_URL || '';
+
 const API_URLS = {
-    NOTIFICATION: 'http://localhost:3002/api/v1',
-    PERSONALIZATION: 'http://localhost:3004/api/v1',
-    NEWS: 'http://localhost:3005/api/v1',
-    
-    // This is Developer A's Market Data service (for search)
-    // Assuming it runs on the same port as his user-service
-    MARKET_DATA: 'http://localhost:5001/api/v1' 
+    NOTIFICATION: `${API_BASE}/api/v1`,
+    PERSONALIZATION: `${API_BASE}/api/v1`,
+    NEWS: `${API_BASE}/api/v1`,
+    MARKET_DATA: `${API_BASE}/api/v1`,
 };
 
 /**
@@ -95,8 +95,6 @@ export const apiGetNews = () => {
 
 // 4. Market Data Service (Search)
 export const apiSearchAssets = (query) => {
-    // This calls Developer A's endpoint
-    // Assuming it also requires auth
     return fetchWithAuth(`${API_URLS.MARKET_DATA}/market/assets/search?query=${query}`);
 };
 

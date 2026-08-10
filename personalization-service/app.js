@@ -8,7 +8,8 @@ const {
   errorHandler,
   notFoundHandler,
   createLogger,
-  healthCheck
+  healthCheck,
+  eventBus
 } = require('../shared');
 const { query } = require('../shared/database');
 
@@ -164,5 +165,17 @@ app.delete('/api/v1/favorites/:assetId', authMiddleware, async (req, res) => {
 
 app.use(notFoundHandler);
 app.use(errorHandler);
+
+// Subscribe to inter-service events
+eventBus.subscribe('user.deleted', async (data) => {
+  const { userId } = data;
+  logger.info('Received user.deleted event', { userId });
+  try {
+    const result = await query('DELETE FROM favorites WHERE user_id = $1', [userId]);
+    logger.info('Cleaned up user favorites', { userId, deleted: result.rowCount });
+  } catch (err) {
+    logger.error('Failed to clean up favorites', { userId, error: err.message });
+  }
+});
 
 module.exports = { app, logger };

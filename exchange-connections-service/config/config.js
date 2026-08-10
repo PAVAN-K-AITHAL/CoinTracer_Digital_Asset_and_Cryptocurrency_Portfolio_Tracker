@@ -7,22 +7,41 @@ const dbName = process.env.DB_NAME || process.env.PGDATABASE || 'portfolio_db';
 const dbUser = process.env.DB_USER || process.env.PGUSER || 'postgres';
 const dbPass = process.env.DB_PASSWORD || process.env.PGPASSWORD || 'postgres';
 
+// Build database config — prefer DATABASE_URL for cloud deployments
+let databaseConfig;
+
+if (process.env.DATABASE_URL) {
+  databaseConfig = {
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false },
+    max: parseInt(process.env.DB_POOL_MAX, 10) || 5,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 5000,
+  };
+} else {
+  databaseConfig = {
+    host: dbHost,
+    port: dbPort,
+    database: dbName,
+    user: dbUser,
+    password: dbPass,
+    max: parseInt(process.env.DB_POOL_MAX, 10) || 20,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 2000,
+  };
+
+  if (process.env.DB_SSL === 'true') {
+    databaseConfig.ssl = { rejectUnauthorized: false };
+  }
+}
+
 const config = {
   // Server
   port: process.env.PORT || 5000,
   nodeEnv: process.env.NODE_ENV || 'development',
 
   // Database
-  database: {
-    host: dbHost,
-    port: dbPort,
-    database: dbName,
-    user: dbUser,
-    password: dbPass,
-    max: 20,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 2000
-  },
+  database: databaseConfig,
 
   // Security
   // Align defaults across services for local dev
