@@ -1,0 +1,169 @@
+# ============================================================================
+# CoinTracer — Render Blueprint (Infrastructure as Code)
+# ============================================================================
+# This file defines all 6 microservices for Render deployment.
+# Import this in Render Dashboard → Blueprints → New Blueprint
+#
+# Each service:
+#   - Builds from the monorepo root (npm ci)
+#   - Runs its own entry point (node <service>/index.js)
+#   - Gets its own URL: https://cointracer-<name>.onrender.com
+#   - Sleeps after 15 min inactivity (free tier)
+#
+# After deploying, update the gateway env vars with the actual Render URLs.
+# ============================================================================
+
+services:
+  # ========================================================================
+  # API Gateway (reverse proxy)
+  # ========================================================================
+  - type: web
+    name: cointracer-gateway
+    runtime: node
+    plan: free
+    buildCommand: npm ci --omit=dev
+    startCommand: node server.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: USER_SERVICE_URL
+        sync: false  # Set manually after all services are deployed
+      - key: PORTFOLIO_SERVICE_URL
+        sync: false
+      - key: MARKET_SERVICE_URL
+        sync: false
+      - key: PERSONALIZATION_SERVICE_URL
+        sync: false
+      - key: ALERTS_SERVICE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+
+  # ========================================================================
+  # User Service (auth, registration, profile)
+  # ========================================================================
+  - type: web
+    name: cointracer-user-svc
+    runtime: node
+    plan: free
+    buildCommand: npm ci --omit=dev
+    startCommand: node user-service/index.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: DB_SCHEMA
+        value: users_svc
+      - key: JWT_SECRET
+        sync: false
+      - key: REDIS_URL
+        sync: false
+
+  # ========================================================================
+  # Portfolio Service (portfolios, exchange connections, holdings)
+  # ========================================================================
+  - type: web
+    name: cointracer-portfolio-svc
+    runtime: node
+    plan: free
+    buildCommand: npm ci --omit=dev
+    startCommand: node exchange-connections-service/server.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: DB_SCHEMA
+        value: portfolios_svc
+      - key: JWT_SECRET
+        sync: false
+      - key: ENCRYPTION_KEY
+        sync: false
+      - key: API_KEY_HASH_SECRET
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: MARKET_DATA_SERVICE_URL
+        sync: false
+
+  # ========================================================================
+  # Market Data Service (prices, dashboard, news)
+  # ========================================================================
+  - type: web
+    name: cointracer-market-svc
+    runtime: node
+    plan: free
+    buildCommand: npm ci --omit=dev
+    startCommand: node market-data-service/index.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: CMC_API_KEY
+        sync: false
+      - key: CMC_BASE_URL
+        value: https://pro-api.coinmarketcap.com
+      - key: REDIS_URL
+        sync: false
+
+  # ========================================================================
+  # Personalization Service (favorites)
+  # ========================================================================
+  - type: web
+    name: cointracer-personalization-svc
+    runtime: node
+    plan: free
+    buildCommand: npm ci --omit=dev
+    startCommand: node personalization-service/index.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: DB_SCHEMA
+        value: personalization_svc
+      - key: JWT_SECRET
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: MARKET_DATA_SERVICE_URL
+        sync: false
+
+  # ========================================================================
+  # Alerts Service (price alerts, background worker)
+  # ========================================================================
+  - type: web
+    name: cointracer-alerts-svc
+    runtime: node
+    plan: free
+    buildCommand: npm ci --omit=dev
+    startCommand: node alerts-service/index.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: DB_SCHEMA
+        value: alerts_svc
+      - key: JWT_SECRET
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: MARKET_DATA_SERVICE_URL
+        sync: false
+      - key: ENABLE_ALERT_WORKER
+        value: "true"
+      - key: ALERT_CHECK_INTERVAL_MS
+        value: "60000"
