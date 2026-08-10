@@ -1,6 +1,7 @@
 {
   "rewrites": [
-    { "source": "/api/:path*", "destination": "https://your-oci-domain.com/api/:path*" }
+    { "source": "/api/:path*", "destination": "https://cointracer-gateway.onrender.com/api/:path*" },
+    { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [
     {
