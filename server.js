@@ -74,7 +74,7 @@ function createServiceProxy(target, pathRewrite) {
   return createProxyMiddleware({
     target,
     changeOrigin: true,
-    pathRewrite,
+    pathRewrite: pathRewrite || ((path, req) => req.originalUrl),
     timeout: 30000,
     proxyTimeout: 30000,
     on: {
