@@ -19,7 +19,21 @@ export default function Register() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
       });
-      const data = await res.json();
+
+      // Handle non-JSON responses (e.g., HTML error pages during cold starts)
+      const contentType = res.headers.get('content-type') || '';
+      let data;
+      if (contentType.includes('application/json')) {
+        data = await res.json();
+      } else {
+        const text = await res.text();
+        throw new Error(
+          res.status === 502
+            ? 'Server is waking up — please wait 30 seconds and try again.'
+            : `Unexpected response (${res.status}): ${text.substring(0, 100)}`
+        );
+      }
+
       if (!res.ok) throw new Error(data.message || 'Registration failed');
       if (data.token) {
         // Persist token and notify app header/auth listeners (same-tab updates)
