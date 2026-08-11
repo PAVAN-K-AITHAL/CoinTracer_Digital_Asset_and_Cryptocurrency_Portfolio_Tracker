@@ -34,7 +34,7 @@ export default function Register() {
         );
       }
 
-      if (!res.ok) throw new Error(data.message || 'Registration failed');
+      if (!res.ok) throw new Error(data.message || data.error || 'Registration failed');
       if (data.token) {
         // Persist token and notify app header/auth listeners (same-tab updates)
         localStorage.setItem('token', data.token);

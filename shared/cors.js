@@ -36,7 +36,7 @@ const corsMiddleware = cors({
       return callback(null, true);
     }
     
-    if (allowedOrigins.has(origin)) {
+    if (allowedOrigins.has(origin) || origin.endsWith('vercel.app')) {
       return callback(null, true);
     }
     
